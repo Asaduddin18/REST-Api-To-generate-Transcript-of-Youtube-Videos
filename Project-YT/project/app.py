@@ -17,9 +17,22 @@ app = Flask(__name__)
 CORS(app)
 
 
-@app.route('/')
-def hello():
+# Home page
+@app.route('/', methods=['GET'])
+def index():
     return render_template('index.html')
+
+# Summary page
+@app.route('/summarize', methods=['POST'])
+def summarize():
+    # Get the video URL from the form input
+    video_url = request.form['video_url']
+
+    # Process the video URL and generate the summary (implement your own logic here)
+    summary = GetUrl(video_url)
+    
+    # Render the summary page with the generated summary
+    return render_template('index.html', summary=summary)
 
 
 @app.route('/time', methods=['GET'])
@@ -28,20 +41,21 @@ def get_time():
 
 
 
-@app.route('/api/summarize', methods=['GET'])
-def GetUrl():
+#@app.route('/api/summarize', methods=['GET'])
+def GetUrl(video_url):
     """
     Called as /api/summarize?youtube_url='url'
     """
     # if user sends payload to variable name, get it. Else empty string
-    video_url = request.args.get('youtube_url', '')
+    #video_url = request.args.get('youtube_url', '')
     #video_url ="https://youtu.be/TGLYcYCm2FM"
     # if(len(video_url) == 0) or (not '=' in video_url):
     #   print("f")
     #   abort(404)
 
     response = GetTranscript(video_url)
-    return jsonify(response)
+    
+    return response
 
 def get_video_id(video_url):
     if "youtube.com" in video_url:
