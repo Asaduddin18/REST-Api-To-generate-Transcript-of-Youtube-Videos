@@ -1,115 +1,3 @@
-# from flask import Flask
-# import datetime
-# from youtube_transcript_api import YouTubeTranscriptApi
-# import json
-# from transformers import pipeline
-# from transformers import BartTokenizer, BartForConditionalGeneration
-# import torch
-# from flask import request
-# from urllib.parse import urlparse
-# from urllib.parse import urlparse, parse_qs
-# from contextlib import suppress
-# from flask import *  
-# # define a variable to hold you app
-# app = Flask(__name__)
-
-# # define your resource endpoints
-# @app.route('/hello')
-# def index_page():
-#     return "Hello world"
-
-# @app.route('/time', methods=['GET'])
-# def get_time():
-#     return str(datetime.datetime.now())
-
-# def get_yt_id(url, ignore_playlist=False):
-#     # Examples:
-#     # - http://youtu.be/SA2iWivDJiE
-#     # - http://www.youtube.com/watch?v=_oPAwA_Udwc&feature=feedu
-#     # - http://www.youtube.com/embed/SA2iWivDJiE
-#     # - http://www.youtube.com/v/SA2iWivDJiE?version=3&amp;hl=en_US
-#     query = urlparse(url)
-#     if query.hostname == 'youtu.be': return query.path[1:]
-#     if query.hostname in {'www.youtube.com', 'youtube.com', 'music.youtube.com'}:
-#         if not ignore_playlist:
-#         # use case: get playlist id not current video in playlist
-#             with suppress(KeyError):
-#                 return parse_qs(query.query)['list'][0]
-#         if query.path == '/watch': return parse_qs(query.query)['v'][0]
-#         if query.path[:7] == '/watch/': return query.path.split('/')[1]
-#         if query.path[:7] == '/embed/': return query.path.split('/')[2]
-#         if query.path[:3] == '/v/': return query.path.split('/')[2]
-    
-# #api/summarize?youtube_url=url
-# @app.route('/api/summarize', methods=['GET'])
-# def getTranscript():
-    
-#     url = request.args.get('youtube_url')
-    
-#     #url ="https://youtu.be/TGLYcYCm2FM"
-   
-#     video_id = get_yt_id(url)
-#     # print(url)
-#     # url_data = urlparse(url)
-    
-#     # video_id=url_data.query[2::]
-    
-#     transcript= str(YouTubeTranscriptApi.get_transcript(video_id))
-    
-#     model = BartForConditionalGeneration.from_pretrained('facebook/bart-large-cnn')
-#     tokenizer = BartTokenizer.from_pretrained('facebook/bart-large-cnn')
-
-#     # tokenize without truncation
-#     inputs_no_trunc = tokenizer(transcript, max_length=None, return_tensors='pt', truncation=False)
-
-#     # get batches of tokens corresponding to the exact model_max_length
-#     chunk_start = 0
-#     chunk_end = tokenizer.model_max_length  # == 1024 for Bart
-#     inputs_batch_lst = []
-#     while chunk_start <= len(inputs_no_trunc['input_ids'][0]):
-#         inputs_batch = inputs_no_trunc['input_ids'][0][chunk_start:chunk_end]  # get batch of n tokens
-#         inputs_batch = torch.unsqueeze(inputs_batch, 0)
-#         inputs_batch_lst.append(inputs_batch)
-#         chunk_start += tokenizer.model_max_length  # == 1024 for Bart
-#         chunk_end += tokenizer.model_max_length  # == 1024 for Bart
-
-#     # generate a summary on each batch
-#     summary_ids_lst = [model.generate(inputs, num_beams=4, max_length=100, early_stopping=True) for inputs in inputs_batch_lst]
-
-#     # decode the output and join into one string with one paragraph per summary batch
-#     summary_batch_lst = []
-#     for summary_id in summary_ids_lst:
-#         summary_batch = [tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in summary_id]
-#         summary_batch_lst.append(summary_batch[0])
-#     summary_all = '\n'.join(summary_batch_lst)
-#     #return render_template('index.html')
-#     return (summary_all)
-
-
-    
-
-
-# #id = 'Y8Tko2YC5hA'
-
-
-
-
-# # using pipeline API for summarization task
-
-# #***********************************************************
-# # summarization = pipeline("summarization")
-# # summary_text = summarization(transcript)[0]['summary_text']
-# # print("Summary:", summary_text)
-
-
-
-    
-
-
-# # server the app when this file is run
-# if __name__ == '__main__':
-#     app.debug = True
-#     app.run()
 
 from __future__ import absolute_import
 from __future__ import division, print_function, unicode_literals
@@ -122,7 +10,8 @@ from flask import render_template
 from flask import abort
 from flask_cors import CORS
 import os
-
+import nltk
+nltk.download('punkt')
 # define a variable to hold you app
 app = Flask(__name__)
 CORS(app)
@@ -138,6 +27,7 @@ def get_time():
     return str(datetime.datetime.now())
 
 
+
 @app.route('/api/summarize', methods=['GET'])
 def GetUrl():
     """
@@ -145,12 +35,28 @@ def GetUrl():
     """
     # if user sends payload to variable name, get it. Else empty string
     video_url = request.args.get('youtube_url', '')
+    #video_url ="https://youtu.be/TGLYcYCm2FM"
     # if(len(video_url) == 0) or (not '=' in video_url):
     #   print("f")
     #   abort(404)
 
     response = GetTranscript(video_url)
     return jsonify(response)
+
+def get_video_id(video_url):
+    if "youtube.com" in video_url:
+        # Extract the video ID from the URL
+        video_id = video_url.split("v=")[1]
+        # Check if there are additional query parameters
+        if "&" in video_id:
+            video_id = video_id.split("&")[0]
+        return video_id
+    elif "youtu.be" in video_url:
+        # Extract the video ID from the short URL format
+        video_id = video_url.split("/")[-1]
+        return video_id
+    else:
+        return None
 
 
 def SumySummarize(text):
@@ -171,13 +77,25 @@ def SumySummarize(text):
     # or for plain text files
     # parser = PlaintextParser.from_file("document.txt", Tokenizer(LANGUAGE))
     parser = PlaintextParser.from_string(text, Tokenizer(LANGUAGE))
+    # Create a parser object using the `PlaintextParser` class, which takes a string `text` as input.
+    # The `Tokenizer` class is used to tokenize the text into individual sentences.
+    # `LANGUAGE` is the language used for tokenization.
     stemmer = Stemmer(LANGUAGE)
-
+    # Create a stemmer object using the `Stemmer` class.
+    # The stemmer is used to reduce words to their base or root form.
+    # `LANGUAGE` is the language for stemming.
     summarizer = Summarizer(stemmer)
+    # Create a summarizer object using the `Summarizer` class, which takes a stemmer as input.
+    # The summarizer is used to generate summaries from the parsed text.
     summarizer.stop_words = get_stop_words(LANGUAGE)
+    # The `get_stop_words` function is used to retrieve a list of stop words for the given language.
     s = ""
+    # Iterate over the sentences returned by the summarizer.
+    # `SENTENCES_COUNT` specifies the desired number of sentences in the summary.
     for sentence in summarizer(parser.document, SENTENCES_COUNT):
+         # Append each sentence to the `s` string by converting it to a string representation.
         s += (str)(sentence)
+    # At this point, the `s` string will contain the generated summary of a segment.
     return s
 
 
@@ -233,35 +151,51 @@ def StringTime(time):
 def GetTranscript(video_url):
     text = ""
     try:
-        video_id = (video_url.split('=')[1]).split("&")[0]
+        
+        video_id = get_video_id(video_url)
+        
         transcript = YouTubeTranscriptApi.get_transcript(video_id)
+        
         duration = max(30, transcript[-1]['start'] // 5)
+        # Calculate the duration of each summary segment.
+        # It is determined by the maximum value between 30 and the time of the last transcript segment divided by 5.
+
         i, end, st = 0, 0, 0
         text, ps_text = "", ""
         summary_content = []
         while(i < len(transcript)):
             if(end - st < duration):
+                 # If the duration of the current segment is less than the desired duration:
                 end = transcript[i]['start'] + transcript[i]['duration']
                 ps_text += transcript[i]['text']
+                # Concatenate the text of the current transcript segment to the temporary summary text.
                 ps_text += ". "
             else:
                 # text += "[ " + StringTime(st) + " - " + StringTime(end) + "] " + SumySummarize(ps_text) + "\n\n"
                 summary_content.append({"start": StringTime(
                     st), "end": StringTime(end), "text": SumySummarize(ps_text)})
+                text+=SumySummarize(ps_text)
+                # Create a summary content entry with the start time, end time, and summarized text of the previous segment.
                 st = end
                 end = transcript[i]['start'] + transcript[i]['duration']
                 ps_text = transcript[i]['text']
+                 # Reset the start time and end time for the next summary segment,
+                # and update the temporary summary text with the current transcript segment.
 
             i += 1
         summary_content.append({"start": StringTime(
             st), "end": StringTime(end), "text": SumySummarize(ps_text)})
         # text += "[ " + StringTime(st) + " - " + StringTime(end) + "] " + SumySummarize(ps_text) + "\n\n"
-        return summary_content
+        text+=SumySummarize(ps_text)
+        # Create a summary content entry for the final segment, using the remaining start time, end time, and summarized text.
+        return text
     except Exception as e:
         # GetAudio(video_url)
         # text = GetTextFromAudio()
         # print('The text is: ', text)
+        # If any exception occurs during the process, return an error entry with start time, end time, and the error message.
         return [{"start": StringTime(0), "end": StringTime(0), "text": str(e)}]
+
 
 
 # server the app when this file is run
